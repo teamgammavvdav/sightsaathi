@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AI Vision Assistant</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#2196F3">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AI Vision">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 10px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: #2196F3;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .permission-prompt {
+            background: #FFC107;
+            color: #000;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            text-align: center;
+            display: block;
+        }
+
+        .permission-btn {
+            background: #FF9800;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-weight: bold;
+            margin-top: 10px;
+            cursor: pointer;
+            font-size: 18px;
+        }
+
+        .camera-container {
+            position: relative;
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            min-height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #camera {
+            width: 100%;
+            height: 300px;
+            object-fit: cover;
+            background: #000;
+        }
+
+        .camera-placeholder {
+            text-align: center;
+            color: #666;
+            padding: 40px 20px;
+        }
+
+        .mode-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .mode-btn {
+            padding: 15px 10px;
+            border: 2px solid #2196F3;
+            background: white;
+            color: #2196F3;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+
+        .mode-btn.active {
+            background: #2196F3;
+            color: white;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 18px 15px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+            min-height: 60px;
+        }
+
+        .btn-analyze {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-continuous {
+            background: #FF9800;
+            color: white;
+        }
+
+        .btn-speak {
+            background: #9C27B0;
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .results {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            min-height: 120px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            flex: 1;
+        }
+
+        .install-banner {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: #2196F3;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 1000;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            display: none;
+        }
+
+        .install-banner.show {
+            display: block;
+        }
+
+        .install-btn {
+            background: white;
+            color: #2196F3;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 5px;
+            cursor: pointer;
+        }
+
+        .manual-install {
+            background: #FFF3E0;
+            border: 2px solid #FF9800;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔍 AI Vision Assistant</h1>
+        <div>Camera-powered accessibility tool</div>
+    </div>
+
+    <div class="permission-prompt" id="permission-prompt">
+        <div>📷 <strong>Camera Access Required</strong></div>
+        <div>This app needs camera access to analyze your surroundings</div>
+        <button class="permission-btn" onclick="requestCameraPermission()">📷 Enable Camera</button>
+    </div>
+
+    <div class="camera-container">
+        <div class="camera-placeholder" id="camera-placeholder">
+            <div style="font-size: 48px; margin-bottom: 20px;">📷</div>
+            <div><strong>Camera Not Active</strong></div>
+            <div style="margin-top: 10px;">Click "Enable Camera" above to start</div>
+        </div>
+        <video id="camera" autoplay playsinline muted style="display: none;"></video>
+        <canvas id="canvas" style="display:none;"></canvas>
+    </div>
+
+    <div class="mode-selector">
+        <button class="mode-btn active" data-mode="Object Detection">🎯 Object Detection</button>
+        <button class="mode-btn" data-mode="Scene Description">🏞️ Scene Description</button>
+        <button class="mode-btn" data-mode="Money Counter">💰 Money Counter</button>
+        <button class="mode-btn" data-mode="Reading Mode">📖 Reading Mode</button>
+    </div>
+
+    <div class="controls">
+        <button class="btn btn-analyze" id="analyze-btn" disabled>🔍 Analyze Frame</button>
+        <button class="btn btn-continuous" id="continuous-btn" disabled>▶️ Continuous</button>
+        <button class="btn btn-speak" id="speak-btn">🔊 Speak Result</button>
+    </div>
+
+    <div class="results">
+        <h3>Analysis Results</h3>
+        <div id="result-content">Enable camera access to start analyzing your surroundings.</div>
+    </div>
+
+    <div class="install-banner" id="install-banner">
+        📱 <strong>Install this app!</strong>
+        <div>Add to your home screen for the best experience</div>
+        <button class="install-btn" id="install-btn">📲 Install App</button>
+        <button class="install-btn" onclick="showManualInstall()">📖 How to Install</button>
+        <button class="install-btn" onclick="hideInstallBanner()">❌ Later</button>
+    </div>
+
+    <div class="manual-install" id="manual-install">
+        <h4>📱 How to Install on Home Screen</h4>
+        <div><strong>Android Chrome:</strong></div>
+        <ol>
+            <li>Tap <strong>⋮</strong> (3 dots menu)</li>
+            <li>Select <strong>"Add to Home screen"</strong></li>
+            <li>Tap <strong>"Add"</strong></li>
+        </ol>
+        <div><strong>iPhone Safari:</strong></div>
+        <ol>
+            <li>Tap <strong>Share</strong> button 📤</li>
+            <li>Select <strong>"Add to Home Screen"</strong></li>
+            <li>Tap <strong>"Add"</strong></li>
+        </ol>
+        <button class="install-btn" onclick="hideManualInstall()">Got it!</button>
+    </div>
+
+    <script>
+        let currentMode = 'Object Detection';
+        let lastResult = '';
+        let continuousMode = false;
+        let continuousInterval = null;
+        let deferredPrompt = null;
+        let cameraStream = null;
+        let cameraEnabled = false;
+
+        // Show install prompt after camera works
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            if (cameraEnabled) {
+                setTimeout(() => {
+                    document.getElementById('install-banner').classList.add('show');
+                }, 3000);
+            }
+        });
+
+        document.getElementById('install-btn').addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const choiceResult = await deferredPrompt.userChoice;
+                deferredPrompt = null;
+                hideInstallBanner();
+            } else {
+                showManualInstall();
+            }
+        });
+
+        function hideInstallBanner() {
+            document.getElementById('install-banner').classList.remove('show');
+        }
+
+        function showManualInstall() {
+            document.getElementById('manual-install').style.display = 'block';
+            hideInstallBanner();
+        }
+
+        function hideManualInstall() {
+            document.getElementById('manual-install').style.display = 'none';
+        }
+
+        // Request camera permission
+        async function requestCameraPermission() {
+            const resultContent = document.getElementById('result-content');
+            const camera = document.getElementById('camera');
+            const placeholder = document.getElementById('camera-placeholder');
+            const analyzeBtn = document.getElementById('analyze-btn');
+            const continuousBtn = document.getElementById('continuous-btn');
+
+            try {
+                console.log('Requesting camera permission...');
+                resultContent.textContent = '📷 Requesting camera permission...';
+
+                // Try different camera constraints
+                const constraints = [
+                    { video: { facingMode: 'environment' } }, // Back camera
+                    { video: { facingMode: 'user' } },        // Front camera  
+                    { video: true }                           // Any camera
+                ];
+
+                let stream = null;
+                for (const constraint of constraints) {
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia(constraint);
+                        break;
+                    } catch (err) {
+                        console.log('Constraint failed:', err.message);
+                    }
+                }
+
+                if (stream) {
+                    cameraStream = stream;
+                    camera.srcObject = stream;
+                    camera.style.display = 'block';
+                    placeholder.style.display = 'none';
+                    document.getElementById('permission-prompt').style.display = 'none';
+
+                    analyzeBtn.disabled = false;
+                    continuousBtn.disabled = false;
+                    cameraEnabled = true;
+
+                    resultContent.innerHTML = '✅ Camera ready! Press "Analyze Frame" to start.';
+
+                    // Show install banner after camera works
+                    setTimeout(() => {
+                        document.getElementById('install-banner').classList.add('show');
+                    }, 3000);
+
+                } else {
+                    throw new Error('No camera access granted');
+                }
+
+            } catch (err) {
+                console.error('Camera error:', err);
+                resultContent.innerHTML = `
+                    ❌ Camera failed: ${err.message}<br><br>
+                    <strong>Troubleshooting:</strong><br>
+                    1. Make sure you clicked "Allow" for camera permission<br>
+                    2. Try refreshing the page<br>
+                    3. Check browser settings for camera permissions<br>
+                    4. Use Chrome (Android) or Safari (iPhone)
+                `;
+            }
+        }
+
+        // Mode selection
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentMode = btn.dataset.mode;
+            });
+        });
+
+        // Analyze frame
+        async function analyzeFrame() {
+            if (!cameraEnabled) {
+                alert('Please enable camera first');
+                return;
+            }
+
+            const analyzeBtn = document.getElementById('analyze-btn');
+            const resultContent = document.getElementById('result-content');
+            const canvas = document.getElementById('canvas');
+            const camera = document.getElementById('camera');
+
+            analyzeBtn.disabled = true;
+            analyzeBtn.textContent = '⏳ Analyzing...';
+            resultContent.textContent = '🔄 Analyzing frame with AI...';
+
+            try {
+                // Capture frame
+                const ctx = canvas.getContext('2d');
+                canvas.width = camera.videoWidth || 640;
+                canvas.height = camera.videoHeight || 480;
+                ctx.drawImage(camera, 0, 0);
+
+                const imageData = canvas.toDataURL('image/jpeg', 0.8);
+
+                // Send to backend
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: imageData,
+                        mode: currentMode
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    resultContent.textContent = `❌ ${data.error}`;
+                } else {
+                    lastResult = data.result;
+                    resultContent.innerHTML = `
+                        <strong>[${data.mode}] ${data.timestamp}</strong><br><br>
+                        ${data.result}
+                    `;
+
+                    // Auto-speak result
+                    if ('speechSynthesis' in window) {
+                        speechSynthesis.cancel();
+                        const utterance = new SpeechSynthesisUtterance(data.result);
+                        speechSynthesis.speak(utterance);
+                    }
+                }
+
+            } catch (error) {
+                resultContent.textContent = `❌ Network error: ${error.message}`;
+            } finally {
+                analyzeBtn.disabled = false;
+                analyzeBtn.textContent = '🔍 Analyze Frame';
+            }
+        }
+
+        // Continuous detection
+        function toggleContinuous() {
+            const continuousBtn = document.getElementById('continuous-btn');
+
+            continuousMode = !continuousMode;
+
+            if (continuousMode) {
+                continuousBtn.textContent = '⏹️ Stop';
+                continuousBtn.style.background = '#f44336';
+                continuousInterval = setInterval(analyzeFrame, 3000);
+            } else {
+                continuousBtn.textContent = '▶️ Continuous';
+                continuousBtn.style.background = '#FF9800';
+                if (continuousInterval) {
+                    clearInterval(continuousInterval);
+                }
+            }
+        }
+
+        // Speak last result
+        function speakLastResult() {
+            if (lastResult && 'speechSynthesis' in window) {
+                speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(lastResult);
+                speechSynthesis.speak(utterance);
+            } else {
+                document.getElementById('result-content').textContent = 'No analysis result available';
+            }
+        }
+
+        // Event listeners
+        document.getElementById('analyze-btn').addEventListener('click', analyzeFrame);
+        document.getElementById('continuous-btn').addEventListener('click', toggleContinuous);
+        document.getElementById('speak-btn').addEventListener('click', speakLastResult);
+    </script>
+</body>
+</html>
