@@ -11,7 +11,7 @@ import os
 app = Flask(__name__)
 
 # Your API key
-API_KEY = "AIzaSyBv9sXI--62w_jwKwBva_XzLdApqBVsgeU"
+API_KEY = "AIzaSyCYc7vlBnEqIRtXgx8NHhE6SjyGs0Lnmuc"
 
 # Initialize Gemini with FIXED import
 try:
