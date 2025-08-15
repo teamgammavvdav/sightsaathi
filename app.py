@@ -1,28 +1,30 @@
-# app.py - FIXED for Render deployment
+# app.py - Modified for DeepSeek via OpenRouter
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import base64
 import io
 from PIL import Image
-import google.generativeai as genai
+from openai import OpenAI
 from datetime import datetime
 import json
 import os
 
 app = Flask(__name__)
 
-# Your API key
-API_KEY = "AIzaSyCYc7vlBnEqIRtXgx8NHhE6SjyGs0Lnmuc"
+# OpenRouter API configuration for DeepSeek
+OPENROUTER_API_KEY = "sk-80a051a8bbde225ed776e3a90b02f2490d415b64e7063f501195dbec54d83f99"
 
-# Initialize Gemini with FIXED import
+# Initialize OpenAI client with OpenRouter
 try:
-    genai.configure(api_key=API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    gemini_ready = True
-    print("✅ Gemini API initialized successfully")
+    client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=OPENROUTER_API_KEY,
+    )
+    deepseek_ready = True
+    print("✅ OpenRouter + DeepSeek API initialized successfully")
 except Exception as e:
-    print(f"❌ Gemini initialization error: {e}")
-    gemini_ready = False
-    model = None
+    print(f"❌ OpenRouter initialization error: {e}")
+    deepseek_ready = False
+    client = None
 
 # Store analysis history
 analysis_history = []
@@ -53,7 +55,7 @@ def manifest():
             },
             {
                 "src": "/static/icon-512.png",
-                "sizes": "512x512",
+                "sizes": "512x512", 
                 "type": "image/png",
                 "purpose": "any maskable"
             }
@@ -66,8 +68,8 @@ def service_worker():
 
 @app.route('/analyze', methods=['POST'])
 def analyze_frame():
-    if not gemini_ready or not model:
-        return jsonify({'error': 'Gemini API not available'})
+    if not deepseek_ready or not client:
+        return jsonify({'error': 'DeepSeek API not available'})
 
     try:
         data = request.json
@@ -76,25 +78,51 @@ def analyze_frame():
 
         print(f"🔍 Analyzing image in {mode} mode...")
 
-        # Decode base64 image
-        image_bytes = base64.b64decode(image_data.split(',')[1])
+        # IMPORTANT: DeepSeek V3 does NOT support vision/image input
+        # Using GPT-4 Vision through OpenRouter as alternative
 
-        # Convert to PIL Image for Gemini
-        pil_image = Image.open(io.BytesIO(image_bytes))
+        # Decode base64 image for processing
+        image_base64 = image_data.split(',')[1]
 
         # Get mode-specific prompt
         prompt = get_optimized_prompt(mode)
 
-        # Call Gemini API with FIXED method
-        response = model.generate_content([prompt, pil_image])
-        result = response.text.strip()
+        # Call OpenRouter with a vision-capable model (GPT-4 Vision)
+        response = client.chat.completions.create(
+            extra_headers={
+                "HTTP-Referer": "https://your-site.com",  # Optional
+                "X-Title": "AI Vision Assistant",        # Optional
+            },
+            model="openai/gpt-4-vision-preview",  # Vision-capable model
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            max_tokens=500
+        )
+
+        result = response.choices[0].message.content.strip()
 
         # Store in history
         timestamp = datetime.now().strftime("%H:%M:%S")
         analysis_history.append({
             'timestamp': timestamp,
             'mode': mode,
-            'result': result
+            'result': result,
+            'model_used': 'GPT-4 Vision (via OpenRouter)'
         })
 
         print(f"✅ Analysis complete: {len(result)} characters")
@@ -103,6 +131,7 @@ def analyze_frame():
             'result': result,
             'mode': mode,
             'timestamp': timestamp,
+            'model_used': 'GPT-4 Vision',
             'speak': True
         })
 
@@ -110,50 +139,107 @@ def analyze_frame():
         print(f"❌ Analysis error: {str(e)}")
         return jsonify({'error': f'Analysis failed: {str(e)}'})
 
+# Alternative route for text-only DeepSeek capabilities
+@app.route('/text_analyze', methods=['POST'])
+def text_analyze():
+    """Route for text-only analysis using DeepSeek"""
+    if not deepseek_ready or not client:
+        return jsonify({'error': 'DeepSeek API not available'})
+
+    try:
+        data = request.json
+        text_input = data.get('text', '')
+
+        if not text_input:
+            return jsonify({'error': 'No text provided'})
+
+        print(f"🔍 Analyzing text with DeepSeek...")
+
+        # Call DeepSeek through OpenRouter for text analysis
+        response = client.chat.completions.create(
+            extra_headers={
+                "HTTP-Referer": "https://your-site.com",  # Optional
+                "X-Title": "AI Vision Assistant",        # Optional
+            },
+            model="deepseek/deepseek-chat",  # Free DeepSeek model
+            messages=[
+                {
+                    "role": "user",
+                    "content": text_input
+                }
+            ]
+        )
+
+        result = response.choices[0].message.content.strip()
+
+        # Store in history
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        analysis_history.append({
+            'timestamp': timestamp,
+            'mode': 'Text Analysis',
+            'result': result,
+            'model_used': 'DeepSeek V3'
+        })
+
+        print(f"✅ Text analysis complete: {len(result)} characters")
+
+        return jsonify({
+            'result': result,
+            'mode': 'Text Analysis',
+            'timestamp': timestamp,
+            'model_used': 'DeepSeek V3',
+            'speak': True
+        })
+
+    except Exception as e:
+        print(f"❌ Text analysis error: {str(e)}")
+        return jsonify({'error': f'Text analysis failed: {str(e)}'})
+
 def get_optimized_prompt(mode):
+    """Get mode-specific prompts for vision analysis"""
     prompts = {
-        "Object Detection": '''
-List the objects you see in this image. For each object, only provide:
-1. Object name
-2. Location (left, center, right, top, middle, bottom)
+        "Object Detection": """
+        List the objects you see in this image. For each object, only provide:
+        1. Object name
+        2. Location (left, center, right, top, middle, bottom)
 
-Keep it simple and brief. Example format:
-"Coffee mug on the left, laptop computer in center, phone on right side"
+        Keep it simple and brief. Example format:
+        "Coffee mug on the left, laptop computer in center, phone on right side"
 
-Do not include detailed descriptions, colors, or unnecessary details.
-''',
+        Do not include detailed descriptions, colors, or unnecessary details.
+        """,
 
-        "Scene Description": '''
-Describe this scene for someone who cannot see it. Include:
-1. Overall setting and environment
-2. People present and their activities
-3. Lighting and atmosphere
-4. Important details for navigation
+        "Scene Description": """
+        Describe this scene for someone who cannot see it. Include:
+        1. Overall setting and environment
+        2. People present and their activities
+        3. Lighting and atmosphere
+        4. Important details for navigation
 
-Be comprehensive but clear for audio.
-''',
+        Be comprehensive but clear for audio.
+        """,
 
-        "Money Counter": '''
-Look for currency, coins, or money in this image.
-If money is visible:
-1. List each denomination
-2. Count quantity
-3. Calculate total value
+        "Money Counter": """
+        Look for currency, coins, or money in this image.
+        If money is visible:
+        1. List each denomination
+        2. Count quantity
+        3. Calculate total value
 
-If no money: "No currency detected"
-Be accurate with counting.
-''',
+        If no money: "No currency detected"
+        Be accurate with counting.
+        """,
 
-        "Reading Mode": '''
-Read all visible text in this image:
-1. Signs and labels
-2. Documents
-3. Digital displays
-4. Any written content
+        "Reading Mode": """
+        Read all visible text in this image:
+        1. Signs and labels
+        2. Documents
+        3. Digital displays
+        4. Any written content
 
-Provide exact transcription of what the text says.
-If no text: "No readable text detected"
-'''
+        Provide exact transcription of what the text says.
+        If no text: "No readable text detected"
+        """
     }
 
     return prompts.get(mode, prompts["Object Detection"])
@@ -168,13 +254,14 @@ def clear_history():
     analysis_history = []
     return jsonify({'success': True})
 
-# Health check endpoint for Render
+# Health check endpoint
 @app.route('/health')
 def health_check():
     return jsonify({
         'status': 'healthy',
-        'gemini_ready': gemini_ready,
-        'timestamp': datetime.now().isoformat()
+        'deepseek_ready': deepseek_ready,
+        'timestamp': datetime.now().isoformat(),
+        'note': 'Using GPT-4 Vision for image analysis, DeepSeek V3 for text'
     })
 
 if __name__ == '__main__':
@@ -182,9 +269,12 @@ if __name__ == '__main__':
     os.makedirs('templates', exist_ok=True)
     os.makedirs('static', exist_ok=True)
 
-    print("🚀 Starting AI Vision Assistant...")
-    print(f"📊 Gemini ready: {gemini_ready}")
+    print("🚀 Starting AI Vision Assistant with DeepSeek + GPT-4 Vision...")
+    print(f"📊 DeepSeek ready: {deepseek_ready}")
+    print("⚠️  NOTE: DeepSeek V3 does not support image analysis")
+    print("💡 Using GPT-4 Vision through OpenRouter for image tasks")
+    print("🎯 DeepSeek V3 available for text-only analysis via /text_analyze endpoint")
 
-    # Get port from environment (Render provides this)
+    # Get port from environment
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
